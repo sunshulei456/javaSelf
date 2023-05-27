@@ -84,6 +84,8 @@ import java.io.ObjectStreamException;
 
 public final
 class Inet4Address extends InetAddress {
+
+    // inaddrsz
     final static int INADDRSZ = 4;
 
     /** use serialVersionUID from InetAddress, but Inet4Address instance
@@ -109,8 +111,23 @@ class Inet4Address extends InetAddress {
         holder().hostName = hostName;
         holder().family = IPv4;
         if (addr != null) {
+            /*
+            就是把 ip 地址改为一个
+            一个 ip 地址是： 
+                1.2.3.4 == addr[0001,0010,0011,0100] == address: 0000 0001 0000  0010 0000 0011 0000 0100
+
+            核心是 ipv4 地址 32 位， 正好和 int 的 32 位重合， 让一个 int 每 8 个字节存储一个 ip 段
+            0xFF: 1111 1111
+            0xFF00: 1111 1111 0000 0000
+
+            |= 操作正好是有 1 为 1， 这样将不同位置的 ip 值存入到一个 int 值中
+
+
+            */
             if (addr.length == INADDRSZ) {
+                // addr[3] &  11111111
                 int address  = addr[3] & 0xFF;
+                // 
                 address |= ((addr[2] << 8) & 0xFF00);
                 address |= ((addr[1] << 16) & 0xFF0000);
                 address |= ((addr[0] << 24) & 0xFF000000);
@@ -146,6 +163,11 @@ class Inet4Address extends InetAddress {
          * For compatibility reasons we must therefore write the
          * the InetAddress with this family.
          */
+        /*
+
+        在Java 1.4之前的版本中，InetAddress 对象的创建是基于平台的 AF_INET 值（通常为2）来确定地址族（family）的。
+        为了保持向后兼容性，这段代码将 InetAddress 对象的地址族设置为2。
+        */
         inet.holder().family = 2;
 
         return inet;
@@ -159,7 +181,18 @@ class Inet4Address extends InetAddress {
      * an IP multicast address
      * @since   JDK1.1
      */
+    /*
+    is_multicast_address 是否为多播地址
+    */
     public boolean isMulticastAddress() {
+
+        /*
+        adress: 1.2.3.4
+        & 0xf0000000 ==> 1
+        == == 0xe0000000 ==> == 1110 00000 .... ==> 
+        
+
+        */
         return ((holder().getAddress() & 0xf0000000) == 0xe0000000);
     }
 
@@ -169,6 +202,11 @@ class Inet4Address extends InetAddress {
      *         a wildcard address.
      * @since 1.4
      */
+    /*
+    is_any_local_address ： 用于判断一个 InetAddress 对象是否表示本地的任意地址。
+    本地的任意地址是指一个特殊的 IP 地址，通常表示当前主机上的所有网络接口或所有 IP 地址。
+    这个地址在IPv4中表示为 0.0.0.0，在IPv6中表示为 ::。
+    */
     public boolean isAnyLocalAddress() {
         return holder().getAddress() == 0;
     }
@@ -180,6 +218,16 @@ class Inet4Address extends InetAddress {
      * a loopback address; or false otherwise.
      * @since 1.4
      */
+    /*
+    is_loop_back_address
+    在 IPv4 地址空间中，以 127 开头的地址是保留用于表示回环地址的特殊地址范围。
+    具体来说，所有以 127 开头的地址均被定义为回环地址。IPv4 回环地址范围是 127.0.0.0 到 127.255.255.255
+
+    // 一般还是使用 本机的静态 ip 替换 127.0.0.1 因为有些软件容易出问题
+    127.0.0.1，也被称为本地回环地址。它用于将数据包发送给同一台计算机上的网络接口，是用于本地回环测试和通信的常见地址。
+
+
+    */
     public boolean isLoopbackAddress() {
         /* 127.x.x.x */
         byte[] byteAddr = getAddress();
@@ -193,6 +241,17 @@ class Inet4Address extends InetAddress {
      * a link local address; or false if address is not a link local unicast address.
      * @since 1.4
      */
+    /*
+    is-link-local-address: 判断一个 InetAddress 对象是否表示链路本地地址（link-local address）
+    链路本地地址是指在特定链路（例如本地局域网）上可达的本地地址。
+        它们通常在无需经过路由器或因特网路由时使用，用于本地通信。
+
+    在 IPv4 中，链路本地地址范围是 169.254.0.0 到 169.254.255.255（包括两个地址）。
+        这个地址范围被保留用于链路本地地址。IPv4 链路本地地址通常由自动配置机制（例如 IPv4 的零配置或 APIPA）分配给主机，当其他网络配置方法（如 DHCP）不可用时，它们用于临时的自我配置。
+
+    在 IPv6 中，链路本地地址通过特定的前缀 fe80::/10 表示。
+        这些地址用于链路本地通信，并且在链路上具有本地唯一性。
+    */
     public boolean isLinkLocalAddress() {
         // link-local unicast in IPv4 (169.254.0.0/16)
         // defined in "Documenting Special Use IPv4 Address Blocks
@@ -210,6 +269,17 @@ class Inet4Address extends InetAddress {
      * a site local address; or false if address is not a site local unicast address.
      * @since 1.4
      */
+    /*
+    is-site-local-address: 用于判断一个 InetAddress 对象是否表示站点本地地址（site-local address）。
+        站点本地地址是指在一个站点或组织的范围内可达的本地地址。它们用于在特定的站点或组织内进行本地通信。
+
+    在 IPv4 中，站点本地地址的范围,这些地址范围被保留用于站点本地地址。
+            从 10.0.0.0 到 10.255.255.255，以及
+            从 172.16.0.0 到 172.16.255.255，以及
+            从 192.168.0.0 到 192.168.255.255。
+
+    IPv4 站点本地地址通常在私有网络或内部网络中使用，用于局域网或组织内的通信。
+    */
     public boolean isSiteLocalAddress() {
         // refer to RFC 1918
         // 10/8 prefix
@@ -231,6 +301,21 @@ class Inet4Address extends InetAddress {
      *         of global scope or it is not a multicast address
      * @since 1.4
      */
+    /*
+    is-mg-global: 用于判断一个IPv4地址是否属于全局多播地址
+
+    在网络中，多播地址可以划分为不同的范围，其中包括全局范围、本地范围和私有范围等。
+    检查多播地址是否具有全局范围的意思是确定该地址是否能够在全球范围内进行多播通信。
+
+    具有全局范围的多播地址可以跨越网络边界进行通信，可以在不同的网络和子网之间传输数据。
+    这意味着多播数据可以从一个网络中的发送者发送，并被连接到该网络的其他多播组成员接收。
+
+    相比之下，本地范围的多播地址仅在特定的本地网络范围内有效，不能跨越网络边界进行通信。
+    私有范围的多播地址则用于特定的私有网络或组织内部使用。
+
+    因此，通过检查多播地址是否具有全局范围，可以确定该地址是否适合在全球范围内进行多播通信。
+    这在应用程序中非常有用，可以根据多播地址的范围进行适当的处理和路由选择。
+    */
     public boolean isMCGlobal() {
         // 224.0.1.0 to 238.255.255.255
         byte[] byteAddr = getAddress();
